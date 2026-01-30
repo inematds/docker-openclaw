@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/openclaw-banner.png" alt="OpenClaw - Personal AI Assistant" width="100%">
+</p>
+
 # 🦞 Docker OpenClaw
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)

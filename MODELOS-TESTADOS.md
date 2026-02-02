@@ -227,6 +227,154 @@ Documentacao dos testes realizados com diferentes modelos LLM via Ollama.
 
 ---
 
+### 6. Ollama trunca contexto para 4096 tokens
+
+**Causa:** Ollama tem default `num_ctx=4096`. O parametro `contextWindow` do OpenClaw nao e passado para o Ollama via API OpenAI-compatible.
+
+**Sintoma no log:**
+```
+truncating input prompt limit=4096 prompt=11504
+```
+
+**Solucao:** Criar modelo customizado com Modelfile:
+```
+FROM qwen2.5:32b
+PARAMETER num_ctx 32768
+```
+
+Depois criar:
+```bash
+ollama create qwen2.5-32k -f Modelfile
+```
+
+---
+
+### 7. "gateway token mismatch"
+
+**Causa:** `gateway.remote.token` nao corresponde a `gateway.auth.token`.
+
+**Solucao:** Adicionar em `openclaw.json`:
+```json
+"gateway": {
+  "auth": {
+    "mode": "token",
+    "token": "seu-token"
+  },
+  "remote": {
+    "token": "seu-token"
+  }
+}
+```
+
+---
+
+### 8. Telegram "access not configured" / pairing required
+
+**Causa:** Usuario nao esta aprovado no bot.
+
+**Solucao:**
+1. Usuario envia mensagem para o bot
+2. Bot retorna codigo de pairing (ex: `DJX5TL6K`)
+3. Aprovar no container:
+```bash
+docker compose exec openclaw-gateway node /app/openclaw.mjs pairing approve telegram <CODIGO>
+```
+
+---
+
+### 9. Config Telegram com chave errada
+
+**Causa:** Usar `token` ao inves de `botToken`.
+
+**Errado:**
+```json
+"telegram": { "token": "xxx" }
+```
+
+**Correto:**
+```json
+"channels": {
+  "telegram": {
+    "botToken": "xxx"
+  }
+}
+```
+
+---
+
+## Modelo Avancado: qwen-agentic (Tool-Tuned)
+
+Baseado no [guia do Thomas Hegghammer](https://gist.github.com/Hegghammer/86d2070c0be8b3c62083d6653ad27c23).
+
+### Requisitos
+- **VRAM:** 24-48GB
+- **Modelo base:** Qwen 2.5 72B Q3_K_M (37GB)
+
+### Modelfile (qwen-agentic.Modelfile)
+```
+FROM qwen2.5:72b-instruct-q3_K_M
+
+PARAMETER num_ctx 16384
+
+SYSTEM """You are a helpful assistant with access to tools.
+
+CRITICAL TOOL BEHAVIOR:
+- When you have tools available, USE THEM directly without asking for confirmation
+- Don't describe what you could do — just do it
+- Never say "I don't have access to X" when you have a tool that provides X
+- Execute the task, then report results
+
+Be concise. Act decisively. Don't ask permission for routine tool use."""
+```
+
+### Criar modelo
+```bash
+ollama pull qwen2.5:72b-instruct-q3_K_M
+ollama create qwen-agentic -f qwen-agentic.Modelfile
+```
+
+### Configuracao OpenClaw
+```json
+{
+  "models": {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://localhost:11434/v1",
+        "apiKey": "ollama",
+        "api": "openai-completions",
+        "models": [{
+          "id": "qwen-agentic:latest",
+          "name": "Qwen 2.5 72B Agentic",
+          "contextWindow": 16384,
+          "maxTokens": 8192
+        }]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "ollama/qwen-agentic:latest"
+      }
+    }
+  }
+}
+```
+
+### Variaveis de ambiente Ollama (recomendadas)
+```bash
+export OLLAMA_FLASH_ATTENTION=1
+export OLLAMA_CONTEXT_LENGTH=16384
+```
+
+### Performance esperada
+| Hardware | Tokens/s |
+|----------|----------|
+| 2x RTX 3090 (48GB) | ~16 tok/s |
+| NVIDIA GB10 (119GB unified) | ~25-40 tok/s |
+
+---
+
 ## Resumo - Tabela de Modelos
 
 | Modelo | Provider | Tamanho | Status | Portugues | Recomendado |
